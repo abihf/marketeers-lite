@@ -1,47 +1,33 @@
-
 (function (win, doc) {
 	"use strict";
 	var Ti = win.Ti;
 
-	alert(win.localStorage);
-
 	//Open the database first
 	var db = Ti.Database.open('news');
-			//Ti.Database.openFile(Ti.Filesystem.getFile(Ti.Filesystem.getApplicationDataDirectory(), 'news.db'));
+	//var db = Ti.Database.openFile(Ti.Filesystem.getFile(Ti.Filesystem.getApplicationDataDirectory(), 'news.db'));
 
 	//Create a table and insert values into it
-	db.execute("CREATE TABLE IF NOT EXISTS `news` ( \
-  `id` int unsigned NOT NULL AUTO_INCREMENT, \
-  `guid` varchar(128) NOT NULL, \
-  `title` varchar(256) NOT NULL, \
-  `link` varchar(256) NOT NULL, \
-  `updated` datetime NOT NULL, \
-  `summary` tinytext NOT NULL, \
-  `content` text NOT NULL, \
-  `thumb` varchar(256) NOT NULL, \
-  `read` tinyint(1) NOT NULL, \
-	PRIMARY KEY (`id`), \
-	UNIQUE KEY `guid` (`guid`) \
-	) AUTO_INCREMENT=1 ;");
-	//db.execute("INSERT INTO Users VALUES(1,'Joe Bloggs')");
+	db.execute('create table if not exists "news" ( \
+		"id" INTEGER PRIMARY KEY AUTOINCREMENT, \
+		"guid" TEXT, \
+		"title" TEXT, \
+		"url" TEXT, \
+		"thumb" TEXT, \
+		"date" INTEGER, \
+		"fetched" INTEGER, \
+		"read" INTEGER DEFAULT (0), \
+		"summary" BLOB, \
+		"content" BLOB \
+	);');
 
-	//Select from Table
-	/*
-	var rows = db.execute("SELECT * FROM Users");
-	while (rows.isValidRow()) {
-		//Alert the value of fields id and firstName from the Users database
-		alert('The user id is '+rows.fieldByName('id')+', and user name is '+rows.fieldByName('firstName'));
-		rows.next();
-	}
 
-	//Release memory once you are done with the resultset and the database
-	rows.close();
-	db.close();
-	*/
-
-	function guid_exist(guid, last_updated){
-		if (last_updated) last_updated = " AND `updated` < " + last_updated;
-		else last_updated = '';
+	function guid_exist(guid, last_updated) {
+		if (last_updated) {
+			last_updated = " AND `updated` < " + last_updated;
+		}
+		else {
+			last_updated = '';
+		}
 		var rows = db.execute("SELECT * FROM `news` WHERE guid = '" + guid + "'" + last_updated + ' LIMIT 1');
 		return (rows && rows.rowCount() > 0);
 	}
@@ -106,6 +92,9 @@
 		client.send();
 	}
 
+	/**
+	 *
+	 */
 	function sync() {
 		fetch_news('http://www.sambadhacare.test/feed/atom', function (status, result) {
 			if (status) {
