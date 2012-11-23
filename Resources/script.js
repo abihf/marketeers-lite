@@ -1,36 +1,108 @@
 (function (win, doc) {
 	"use strict";
+
 	var Ti = win.Ti;
 
 	//Open the database first
-	var db = Ti.Database.open('news');
-	//var db = Ti.Database.openFile(Ti.Filesystem.getFile(Ti.Filesystem.getApplicationDataDirectory(), 'news.db'));
+	var db_file = Ti.Filesystem.getFile(Ti.Filesystem.getApplicationDataDirectory(), 'news.db');
+	var db;
+	if (!db_file.exists()) {
+		db = Ti.Database.openFile(db_file);
+		//db.execute('begin transaction');
 
-	//Create a table and insert values into it
-	db.execute('create table if not exists "news" ( \
-		"id" INTEGER PRIMARY KEY AUTOINCREMENT, \
-		"guid" TEXT, \
-		"title" TEXT, \
-		"url" TEXT, \
-		"thumb" TEXT, \
-		"date" INTEGER, \
-		"fetched" INTEGER, \
-		"read" INTEGER DEFAULT (0), \
-		"summary" BLOB, \
-		"content" BLOB \
-	);');
+		try {
+			db.execute('create table if not exists "news" ( \
+			"id" INTEGER PRIMARY KEY AUTOINCREMENT, \
+			"guid" TEXT, \
+			"title" TEXT, \
+			"link" TEXT, \
+			"categories" TEXT, \
+			"thumb" TEXT, \
+			"updated" INTEGER, \
+			"fetched" INTEGER, \
+			"read" INTEGER DEFAULT (0), \
+			"summary" BLOB, \
+			"content" BLOB \
+		);');
+
+			db.execute('CREATE UNIQUE INDEX "guid" on news (guid ASC)');
+			//db.execute('commit');
+
+		}
+		catch (e) {
+			//db.execute('rollback');
+			alert(e);
+		}
+	}
+	else {
+		db = Ti.Database.openFile(db_file);
+	}
+
+	/**
+	 * get last updated
+	 * @param {String} guid
+	 * @return {Number}
+	 */
+	function get_last_update(guid) {
+		var rows = db.execute('select updated from "news" where guid = "' + guid + '" limit 1');
+		return (rows && rows.isValidRow() && rows.rowCount() > 0) ? rows.fieldByName('updated') : 0;
+	}
 
 
-	function guid_exist(guid, last_updated) {
-		if (last_updated) {
-			last_updated = " AND `updated` < " + last_updated;
+	function query_result(table, fields, condition, limit, callback) {
+		var q = 'SELECT ';
+		if (typeof fields === 'string') {
+			q += fields;
+		}
+		else if (Array.isArray(fields)) {
+			q += fields.join(', ');
 		}
 		else {
-			last_updated = '';
+			q += '*';
 		}
-		var rows = db.execute("SELECT * FROM `news` WHERE guid = '" + guid + "'" + last_updated + ' LIMIT 1');
-		return (rows && rows.rowCount() > 0);
+		q += ' from "' + table + '"';
+
+		if (condition) {
+			q += ' where ' + condition;
+		}
+
+		if (limit) {
+			q += ' limit ' + limit;
+		}
+
+		var rows = db.execute(q);
+		var result = [];
+		while (rows.isValidRow()) {
+			//Alert the value of fields id and firstName from the Users database
+			var arr = {};
+			for (var i = 0; i < rows.fieldCount(); i++) {
+				arr[rows.fieldName(i)] = rows.field(i);
+			}
+			if (callback) {
+				callback(arr);
+			}
+			else {
+				result.push(arr);
+			}
+			rows.next();
+		}
+
+		if (callback) {
+			return rows.rowCount();
+		}
+		else {
+			return result;
+		}
 	}
+
+	win.tes = function () {
+		var html = '';
+		query_result('news', 'title, thumb, summary, link', null, null, function (arr) {
+			html += '<article class="childnews hitem"><div class="news-image"><img src="' + arr.thumb + '" /></div></article>';
+		});
+		alert(html);
+	};
+
 
 	/**
 	 *
@@ -71,7 +143,7 @@
 				result.push({
 					'title':title,
 					'updated':updated,
-					'id':id,
+					'guid':id,
 					'categories':categories,
 					'summary':'',
 					'content':contentHTML,
@@ -92,26 +164,67 @@
 		client.send();
 	}
 
+
+	String.prototype.format = function () {
+		var args = arguments;
+		return this.replace(/{(\d+)}/g, function (match, number) {
+			return typeof args[number] != 'undefined' ? args[number] : match;
+		});
+	};
+
+	String.prototype.addSlashes = function () {
+		return this.replace(/([\\'])/g, "\\$1").
+				replace(/\u0008/g, '\\b').
+				replace(/\t/g, '\\t').
+				replace(/\n/g, '\\n').
+				replace(/\f/g, '\\f').
+				replace(/\r/g, '\\r');
+	};
+
+	//alert('abi\naa'.addSlashes());
+
+	function parseDate(str) {
+		var elms = str.substr(0, 19).split(/[\-T:]/);
+		return new Date(elms[0], elms[1], elms[2], elms[3], elms[4], elms[5], 0).getTime();
+	}
+
 	/**
 	 *
 	 */
-	function sync() {
+	win.sync = function sync() {
 		fetch_news('http://www.sambadhacare.test/feed/atom', function (status, result) {
 			if (status) {
-				var html = [];
-				html.push('<table>');
+				db.execute('begin transaction');
+				// 2012-08-29T14:00:59Z
+				var success = true;
 				for (var i = 0; i < result.length; i++) {
-					html.push('<tr>');
-					for (var j in result[i]) {
-						if (result[i].hasOwnProperty(j)) {
-							html.push('<td>' + result[i][j] + '</td>');
+					var item = result[i];
+					var updated = Math.floor(parseDate(item.updated) / 1000);
+					//alert(item.updated + ' - ' + updated);
+					var now = Math.floor(new Date().getTime() / 1000);
+					var tmp;
+					if ((tmp = get_last_update(item.guid)) < updated) {
+						alert(tmp);
+						var q = 'REPLACE INTO `news` (guid, title, link, thumb, categories, updated, fetched, read, summary, content) VALUES ' +
+								"('{0}', '{1}',  '{2}', '{3}', '{4}',  '{5}', '{6}', '{7}',  '{8}',  '{9}');".format(
+										item.guid, item.title.addSlashes(), item.link, item.img, item.categories.join(', ').addSlashes(), updated, now, 0, item.summary.addSlashes(), item.content.addSlashes()
+								);
+						//alert(q);
+						try {
+							db.execute(q);
 						}
+						catch (e) {
+							db.execute('rollback');
+							alert('sync error ' + e);
+							return;
+						}
+
 					}
-					html.push('</tr>');
+
 				}
-				html.push('</table>');
-				document.getElementById('sync-result').innerHTML = html.join('');
+				db.execute('commit');
 			}
+
 		});
 	}
 
