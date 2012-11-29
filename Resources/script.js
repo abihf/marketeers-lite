@@ -28,6 +28,11 @@
 			db.execute('CREATE UNIQUE INDEX "guid" on news (guid ASC)');
 			//db.execute('commit');
 
+			db.execute('create table if not exists "categories" ( \
+			"id" INTEGER PRIMARY KEY AUTOINCREMENT, \
+			"name" TEXT \
+		);');
+
 		}
 		catch (e) {
 			//db.execute('rollback');
@@ -37,6 +42,16 @@
 	else {
 		db = Ti.Database.openFile(db_file);
 	}
+
+	var categories = [];
+	query_result('categories', 'name', null, null, 'name asc', function(res){
+		categories.push(res.name);
+	});
+
+	win.addEventListener('load', function(){
+		show_home();
+		update_categories();
+	}, false);
 
 	/**
 	 * get last updated
@@ -49,7 +64,17 @@
 	}
 
 
-	function query_result(table, fields, condition, limit, callback) {
+	/**
+	 *
+	 * @param {String} table
+	 * @param {String} fields
+	 * @param {String} condition
+	 * @param {String} limit
+	 * @param {Function} callback
+	 * @return {*}
+   * @param sort
+	 */
+	function query_result(table, fields, condition, limit, sort, callback) {
 		var q = 'SELECT ';
 		if (typeof fields === 'string') {
 			q += fields;
@@ -66,9 +91,13 @@
 			q += ' where ' + condition;
 		}
 
+		if (sort)
+			q += ' order by ' + sort;
+
 		if (limit) {
 			q += ' limit ' + limit;
 		}
+
 
 		var rows = db.execute(q);
 		var result = [];
@@ -95,13 +124,51 @@
 		}
 	}
 
-	win.tes = function () {
-		var html = '';
-		query_result('news', 'title, thumb, summary, link', null, null, function (arr) {
-			html += '<article class="childnews hitem"><div class="news-image"><img src="' + arr.thumb + '" /></div></article>';
+	function show_home(){
+		var colors = [
+				[153, 0, 51],
+				[28, 160, 48],
+				[201, 84, 31],
+				[242, 160, 28],
+				[0, 122, 118],
+				[102, 0, 102]
+		];
+		var html = '', i = 0;
+		var container = document.getElementById('news-container');
+		container.innerHTML = '';
+		query_result('news', 'title, thumb, substr(summary, 0, 150) as short_summary, link, updated', null, 6, 'updated desc', function (arr) {
+			//alert(arr.short_summary);
+
+			var new_elm = doc.createElement('article');
+			new_elm.className = 'childnews news-item';
+			new_elm.innerHTML = '<div class="news-image"><img src="' + arr.thumb + '" /></div><div class="news-title"><h1>' +
+					arr.title + '</h1></div><div class="news-content" style="background-color: rgb(' + colors[i].join(',') + ');"><h1>' +
+					arr.title + '</h1><p>' + arr.short_summary + ' ...</p></div>';
+			container.appendChild(new_elm);
+			//new_elm.getElementsByTagName('p')[0].innerHTML = arr.short_summary;
+			i++;
 		});
-		alert(html);
+
+	}
+
+	var categories_shown = false;
+	win.toogle_categories = function(){
+		categories_shown = !categories_shown;
+		document.getElementById('left-pane').style.left = categories_shown ? '0' : '-250px';
 	};
+
+	win.select_category = function(name) {
+
+	};
+
+	function update_categories(){
+		var html = '';
+		for(var i=0; i<categories.length; ++i){
+			html += '<a href="javascript:select_category(\'' + categories[i] + '\')">' + categories[i] + '</a>';
+		}
+		document.getElementById('category-list').innerHTML = html;
+
+	}
 
 
 	/**
@@ -145,7 +212,7 @@
 					'updated':updated,
 					'guid':id,
 					'categories':categories,
-					'summary':'',
+					'summary':summary,
 					'content':contentHTML,
 					'link':link,
 					'img':(m ? m[1] : null)
@@ -192,7 +259,7 @@
 	 *
 	 */
 	win.sync = function sync() {
-		fetch_news('http://www.sambadhacare.test/feed/atom', function (status, result) {
+		fetch_news('http://the-marketeers.com/feed/atom', function (status, result) {
 			if (status) {
 				db.execute('begin transaction');
 				// 2012-08-29T14:00:59Z
@@ -203,15 +270,26 @@
 					//alert(item.updated + ' - ' + updated);
 					var now = Math.floor(new Date().getTime() / 1000);
 					var tmp;
+					alert(item.summary);
 					if ((tmp = get_last_update(item.guid)) < updated) {
-						alert(tmp);
-						var q = 'REPLACE INTO `news` (guid, title, link, thumb, categories, updated, fetched, read, summary, content) VALUES ' +
-								"('{0}', '{1}',  '{2}', '{3}', '{4}',  '{5}', '{6}', '{7}',  '{8}',  '{9}');".format(
-										item.guid, item.title.addSlashes(), item.link, item.img, item.categories.join(', ').addSlashes(), updated, now, 0, item.summary.addSlashes(), item.content.addSlashes()
-								);
 						//alert(q);
 						try {
+							var q = 'REPLACE INTO `news` (guid, title, link, thumb, categories, updated, fetched, read, summary, content) VALUES ' +
+									"('{0}', '{1}',  '{2}', '{3}', '{4}',  '{5}', '{6}', '{7}',  '{8}',  '{9}');".format(
+											item.guid, item.title.addSlashes(), item.link, item.img, item.categories.join(', ').addSlashes(), updated, now, 0, item.summary.addSlashes(), item.content.addSlashes()
+									);
 							db.execute(q);
+
+							var insert_cat = [];
+							for(var k=0; k < item.categories.length; ++k){
+								if (categories.indexOf(item.categories[k]) === -1){
+									insert_cat.push('("' + item.categories[k] + '")');
+									categories.push(item.categories[k]);
+								}
+							}
+							if (insert_cat.length > 0){
+								db.execute('INSERT INTO `categories` (name) VALUES ' + insert_cat.join(', '));
+							}
 						}
 						catch (e) {
 							db.execute('rollback');
@@ -226,6 +304,8 @@
 			}
 
 		});
-	}
+
+		show_home();
+	};
 
 })(window, document);
