@@ -1,13 +1,55 @@
-<html>
-<head></head>
-<script type="text/javascript" src="script.js"></script>
+<!DOCTYPE html>
+<html lang="id-ID">
+<head>
+    <meta charset="ISO-8859-1">
+    <title>Marketeers-Lite</title>
+    <link rel="stylesheet" type="text/css" href="style.css" />
+    <script type="text/javascript" src="script.js"></script>
+</head>
+
 <body style="margin:0; font: 8pt ubuntu">
+<!-- main news slide displayed -->
+<div id="main">
+    <div id="mainnews">
+        <img src="1.jpg" id="mainnews-1"/>
+        <img src="2.jpg" id="mainnews-2"/>
+        <img src="a.jpg" id="mainnews-3"/>
+        <img src="3.jpg" id="mainnews-4"/>
+    </div>
+    <!-- end of main news slide displayed -->
 
-<div id="sync-result">
+    <!-- twitter widget displayed -->
+    <div id="rightapps">
+        <div class="twitter">
 
+        </div>
+    </div>
+    <!-- end of twitter widget displayed -->
+
+    <!-- childnews displayed -->
+    <div class="clear"></div>
+    <div id="news-container"></div>
 </div>
-<button onclick="sync()">Button</button>
-<button onclick="tes()">Tes</button>
-<!-- embed src='http://the-marketeers.com/jwplayer/player.swf' height='48' width='300' allowscriptaccess='always' allowfullscreen='true' flashvars="&file=http%3A%2F%2Fmarketeersradio.primcast.com%3A6896%2F%3Bstream.mp3&plugins=viral-2d"/ -->
+
+<div id="left-pane">
+    <div id="category-list">
+
+    </div>
+</div>
+
+<div id="right-pane">
+    <div id="setting-panel">
+
+    </div>
+</div>
+
+<!-- footer displayed -->
+<div id="footer">
+    <button class="toolbar-button" style="background-image: url(categories.png)" onclick="toogle_categories()"></button>
+    <button class="toolbar-button" style="background-image: url(sync.png)" onclick="sync()"></button>
+    <button class="toolbar-button"></button>
+    <img src="animated_loader.gif" />
+</div>
+<!-- end of footer displayed -->
 </body>
 </html>
